@@ -237,15 +237,25 @@ export default function OrdersPage() {
             {filteredOrders.map((order) => (
               <div key={order.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
                 <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-medium text-gray-900">{order.orderNumber}</h3>
-                    <p className="text-sm text-gray-500 mt-1 truncate">{order.content}</p>
-                    <p className="text-sm font-medium text-gray-900 mt-2">¥{order.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  <div className="flex-1 min-w-0">
+                    {/* 限制订单编号长度并添加省略号，确保状态标签位置固定 */}
+                    <div className="flex items-start">
+                      <h3 className="font-medium text-gray-900 truncate flex-1 min-w-0" title={order.orderNumber}>
+                        {order.orderNumber}
+                      </h3>
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border whitespace-nowrap ml-2 flex-shrink-0 ${getStatusColor(order.status)}`}>
+                        {getStatusIcon(order.status)}
+                        <span className="ml-1">{order.status}</span>
+                      </span>
+                    </div>
+                    {/* 限制订单内容长度并添加省略号 */}
+                    <p className="text-sm text-gray-500 mt-1 truncate" title={order.content}>
+                      {order.content}
+                    </p>
+                    <p className="text-sm font-medium text-gray-900 mt-2">
+                      ¥{order.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
                   </div>
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(order.status)}`}>
-                    {getStatusIcon(order.status)}
-                    <span className="ml-1">{order.status}</span>
-                  </span>
                 </div>
                 <div className="mt-3 flex justify-between items-center">
                   <span className="text-xs text-gray-500">
