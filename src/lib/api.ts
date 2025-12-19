@@ -15,7 +15,7 @@ export async function getAllOrders(): Promise<Order[]> {
   try {
     const response = await fetch('/api/orders');
     if (!response.ok) {
-      throw new Error('获取订单列表失败');
+      throw new Error(`获取订单列表失败: ${response.status} ${response.statusText}`);
     }
     return await response.json();
   } catch (error) {
@@ -32,7 +32,7 @@ export async function getOrderById(id: string): Promise<Order | null> {
       if (response.status === 404) {
         return null;
       }
-      throw new Error('获取订单失败');
+      throw new Error(`获取订单失败: ${response.status} ${response.statusText}`);
     }
     return await response.json();
   } catch (error) {
@@ -53,7 +53,7 @@ export async function createOrder(orderData: Omit<Order, 'id' | 'createdAt' | 'u
     });
     
     if (!response.ok) {
-      throw new Error('创建订单失败');
+      throw new Error(`创建订单失败: ${response.status} ${response.statusText}`);
     }
     
     return await response.json();
@@ -78,7 +78,7 @@ export async function updateOrder(id: string, orderData: Partial<Omit<Order, 'id
       if (response.status === 404) {
         return null;
       }
-      throw new Error('更新订单失败');
+      throw new Error(`更新订单失败: ${response.status} ${response.statusText}`);
     }
     
     return await response.json();
@@ -99,7 +99,7 @@ export async function deleteOrder(id: string): Promise<boolean> {
       if (response.status === 404) {
         return false;
       }
-      throw new Error('删除订单失败');
+      throw new Error(`删除订单失败: ${response.status} ${response.statusText}`);
     }
     
     return true;
@@ -114,7 +114,7 @@ export async function getOrderStatistics() {
   try {
     const response = await fetch('/api/orders/stats');
     if (!response.ok) {
-      throw new Error('获取统计数据失败');
+      throw new Error(`获取统计数据失败: ${response.status} ${response.statusText}`);
     }
     return await response.json();
   } catch (error) {

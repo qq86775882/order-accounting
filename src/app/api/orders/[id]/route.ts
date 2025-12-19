@@ -1,15 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
-
-export interface Order {
-  id: string;
-  content: string;
-  orderNumber: string;
-  status: '已下单' | '已完成' | '已结算';
-  amount: number; // 新增订单金额字段
-  created_at: Date;
-  updated_at: Date;
-}
+import { supabase } from '@/lib/supabase';
 
 // GET /api/orders/[id] - 获取特定订单
 export async function GET(
@@ -17,42 +7,59 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 在本地开发环境中，如果没有配置数据库连接，则返回404
-    if (!process.env.VERCEL && !process.env.POSTGRES_URL) {
-      return NextResponse.json({ error: '数据库未配置' }, { status: 500 });
-    }
+    console.log('GET /api/orders/[id] called');
     
     // 在Next.js 14中，params是一个Promise，需要await来解包
     const { id } = await params;
+    console.log('订单ID:', id);
     
-    const result = await sql`
-      SELECT id, content, order_number, status, amount, created_at, updated_at
-      FROM orders
-      WHERE id = ${id}
-    `;
+    // 从Supabase获取特定订单
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', id)
+      .single();
     
-    if (result.rows.length === 0) {
+    if (error) {
+      console.error('Supabase获取订单失败:', error);
+      // 处理连接超时错误
+      if (error.message.includes('fetch failed') || error.message.includes('Connect Timeout Error')) {
+        return NextResponse.json({ 
+          error: '连接Supabase超时', 
+          details: '请检查网络连接或稍后重试'
+        }, { status: 500 });
+      }
+      return NextResponse.json({ error: '获取订单失败', details: error.message }, { status: 500 });
+    }
+    
+    if (!data) {
+      console.log('订单未找到:', id);
       return NextResponse.json({ error: '订单未找到' }, { status: 404 });
     }
     
-    const row = result.rows[0];
+    // 转换数据格式以匹配前端期望的格式
     const order = {
-      id: row.id,
-      content: row.content,
-      orderNumber: row.order_number,
-      status: row.status,
-      amount: parseFloat(row.amount) || 0,
-      createdAt: row.created_at.toISOString(),
-      updatedAt: row.updated_at.toISOString()
+      id: data.id,
+      content: data.content,
+      orderNumber: data.order_number,
+      status: data.status,
+      amount: data.amount,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
     };
     
-    // 设置正确的Content-Type头
-    const response = NextResponse.json(order);
-    response.headers.set('Content-Type', 'application/json; charset=utf-8');
-    return response;
-  } catch (error) {
+    console.log('成功获取订单:', order.id);
+    return NextResponse.json(order);
+  } catch (error: any) {
     console.error('获取订单失败:', error);
-    return NextResponse.json({ error: '获取订单失败' }, { status: 500 });
+    // 处理连接超时错误
+    if (error.message.includes('fetch failed') || error.message.includes('Connect Timeout Error')) {
+      return NextResponse.json({ 
+        error: '连接Supabase超时', 
+        details: '请检查网络连接或稍后重试'
+      }, { status: 500 });
+    }
+    return NextResponse.json({ error: '获取订单失败', details: error.message || '未知错误' }, { status: 500 });
   }
 }
 
@@ -62,48 +69,72 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 在本地开发环境中，如果没有配置数据库连接，则返回错误
-    if (!process.env.VERCEL && !process.env.POSTGRES_URL) {
-      return NextResponse.json({ error: '数据库未配置' }, { status: 500 });
-    }
+    console.log('PUT /api/orders/[id] called');
     
     // 在Next.js 14中，params是一个Promise，需要await来解包
     const { id } = await params;
+    console.log('订单ID:', id);
+    
     const orderData = await request.json();
+    console.log('更新数据:', orderData);
     
-    const result = await sql`
-      UPDATE orders
-      SET content = ${orderData.content}, 
-          order_number = ${orderData.orderNumber}, 
-          status = ${orderData.status}, 
-          amount = ${orderData.amount || 0},
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${id}
-      RETURNING id, content, order_number, status, amount, created_at, updated_at
-    `;
+    // 准备更新到Supabase的数据
+    const updatedOrder = {
+      content: orderData.content,
+      order_number: orderData.orderNumber,
+      status: orderData.status,
+      amount: orderData.amount || 0,
+      updated_at: new Date().toISOString()
+    };
     
-    if (result.rows.length === 0) {
+    // 更新Supabase中的订单
+    const { data, error } = await supabase
+      .from('orders')
+      .update(updatedOrder)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Supabase更新订单失败:', error);
+      // 处理连接超时错误
+      if (error.message.includes('fetch failed') || error.message.includes('Connect Timeout Error')) {
+        return NextResponse.json({ 
+          error: '连接Supabase超时', 
+          details: '请检查网络连接或稍后重试'
+        }, { status: 500 });
+      }
+      return NextResponse.json({ error: '更新订单失败', details: error.message }, { status: 500 });
+    }
+    
+    if (!data) {
+      console.log('订单未找到:', id);
       return NextResponse.json({ error: '订单未找到' }, { status: 404 });
     }
     
-    const row = result.rows[0];
-    const updatedOrder = {
-      id: row.id,
-      content: row.content,
-      orderNumber: row.order_number,
-      status: row.status,
-      amount: parseFloat(row.amount) || 0,
-      createdAt: row.created_at.toISOString(),
-      updatedAt: row.updated_at.toISOString()
+    // 转换数据格式以匹配前端期望的格式
+    const updatedOrderResponse = {
+      id: data.id,
+      content: data.content,
+      orderNumber: data.order_number,
+      status: data.status,
+      amount: data.amount,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
     };
     
-    // 设置正确的Content-Type头
-    const response = NextResponse.json(updatedOrder);
-    response.headers.set('Content-Type', 'application/json; charset=utf-8');
-    return response;
-  } catch (error) {
+    console.log('成功更新订单:', updatedOrderResponse.id);
+    return NextResponse.json(updatedOrderResponse);
+  } catch (error: any) {
     console.error('更新订单失败:', error);
-    return NextResponse.json({ error: '更新订单失败' }, { status: 500 });
+    // 处理连接超时错误
+    if (error.message.includes('fetch failed') || error.message.includes('Connect Timeout Error')) {
+      return NextResponse.json({ 
+        error: '连接Supabase超时', 
+        details: '请检查网络连接或稍后重试'
+      }, { status: 500 });
+    }
+    return NextResponse.json({ error: '更新订单失败', details: error.message || '未知错误' }, { status: 500 });
   }
 }
 
@@ -113,29 +144,41 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 在本地开发环境中，如果没有配置数据库连接，则返回错误
-    if (!process.env.VERCEL && !process.env.POSTGRES_URL) {
-      return NextResponse.json({ error: '数据库未配置' }, { status: 500 });
-    }
+    console.log('DELETE /api/orders/[id] called');
     
     // 在Next.js 14中，params是一个Promise，需要await来解包
     const { id } = await params;
+    console.log('订单ID:', id);
     
-    const result = await sql`
-      DELETE FROM orders
-      WHERE id = ${id}
-    `;
+    // 从Supabase删除订单
+    const { error } = await supabase
+      .from('orders')
+      .delete()
+      .eq('id', id);
     
-    if (result.rowCount === 0) {
-      return NextResponse.json({ error: '订单未找到' }, { status: 404 });
+    if (error) {
+      console.error('Supabase删除订单失败:', error);
+      // 处理连接超时错误
+      if (error.message.includes('fetch failed') || error.message.includes('Connect Timeout Error')) {
+        return NextResponse.json({ 
+          error: '连接Supabase超时', 
+          details: '请检查网络连接或稍后重试'
+        }, { status: 500 });
+      }
+      return NextResponse.json({ error: '删除订单失败', details: error.message }, { status: 500 });
     }
     
-    // 设置正确的Content-Type头
-    const response = NextResponse.json({ message: '订单删除成功' });
-    response.headers.set('Content-Type', 'application/json; charset=utf-8');
-    return response;
-  } catch (error) {
+    console.log('成功删除订单:', id);
+    return NextResponse.json({ message: '订单删除成功' });
+  } catch (error: any) {
     console.error('删除订单失败:', error);
-    return NextResponse.json({ error: '删除订单失败' }, { status: 500 });
+    // 处理连接超时错误
+    if (error.message.includes('fetch failed') || error.message.includes('Connect Timeout Error')) {
+      return NextResponse.json({ 
+        error: '连接Supabase超时', 
+        details: '请检查网络连接或稍后重试'
+      }, { status: 500 });
+    }
+    return NextResponse.json({ error: '删除订单失败', details: error.message || '未知错误' }, { status: 500 });
   }
 }

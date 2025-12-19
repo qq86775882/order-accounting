@@ -1,74 +1,77 @@
 import { NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
-
-export interface Order {
-  id: string;
-  content: string;
-  orderNumber: string;
-  status: '已下单' | '已完成' | '已结算';
-  amount: number; // 新增订单金额字段
-  created_at: Date;
-  updated_at: Date;
-}
+import { supabase } from '@/lib/supabase';
 
 // GET /api/orders/stats - 获取订单统计数据
 export async function GET() {
   try {
-    // 在本地开发环境中，如果没有配置数据库连接，则返回默认统计数据
-    if (!process.env.VERCEL && !process.env.POSTGRES_URL) {
-      return NextResponse.json({
-        total: 0,
-        pending: 0,
-        completed: 0,
-        settled: 0,
-        pendingAmount: 0,
-        completedAmount: 0,
-        settledAmount: 0
-      });
+    console.log('GET /api/orders/stats called');
+    
+    // 检查数据库连接
+    const { data: checkData, error: checkError } = await supabase
+      .from('orders')
+      .select('id')
+      .limit(1);
+    
+    if (checkError) {
+      console.error('数据库连接检查失败:', checkError);
+      // 如果是表不存在的错误，返回默认统计数据而不是错误
+      if (checkError.message.includes('not found') || checkError.message.includes('Could not find the table')) {
+        console.log('表不存在，返回默认统计数据');
+        return NextResponse.json({
+          total: 0,
+          pending: 0,
+          completed: 0,
+          settled: 0,
+          pendingAmount: 0,
+          completedAmount: 0,
+          settledAmount: 0
+        });
+      }
+      return NextResponse.json({ error: '数据库连接失败', details: checkError.message }, { status: 500 });
     }
     
-    const result = await sql`
-      SELECT 
-        COUNT(*) as total,
-        COUNT(CASE WHEN status = '已下单' THEN 1 END) as pending,
-        COUNT(CASE WHEN status = '已完成' THEN 1 END) as completed,
-        COUNT(CASE WHEN status = '已结算' THEN 1 END) as settled,
-        COALESCE(SUM(CASE WHEN status = '已下单' THEN amount ELSE 0 END), 0) as pending_amount,
-        COALESCE(SUM(CASE WHEN status = '已完成' THEN amount ELSE 0 END), 0) as completed_amount,
-        COALESCE(SUM(CASE WHEN status = '已结算' THEN amount ELSE 0 END), 0) as settled_amount
-      FROM orders
-    `;
+    // 从Supabase获取统计数据
+    const { data, error } = await supabase
+      .from('orders')
+      .select('status, amount');
     
-    const row = result.rows[0];
+    if (error) {
+      console.error('Supabase获取统计数据失败:', error);
+      return NextResponse.json({ error: '获取统计数据失败', details: error.message }, { status: 500 });
+    }
+    
+    // 计算统计数据
+    const total = data.length;
+    const pending = data.filter(order => order.status === '已下单').length;
+    const completed = data.filter(order => order.status === '已完成').length;
+    const settled = data.filter(order => order.status === '已结算').length;
+    
+    const pendingAmount = data
+      .filter(order => order.status === '已下单')
+      .reduce((sum, order) => sum + (order.amount || 0), 0);
+      
+    const completedAmount = data
+      .filter(order => order.status === '已完成')
+      .reduce((sum, order) => sum + (order.amount || 0), 0);
+      
+    const settledAmount = data
+      .filter(order => order.status === '已结算')
+      .reduce((sum, order) => sum + (order.amount || 0), 0);
     
     const stats = {
-      total: parseInt(row.total) || 0,
-      pending: parseInt(row.pending) || 0,
-      completed: parseInt(row.completed) || 0,
-      settled: parseInt(row.settled) || 0,
-      pendingAmount: parseFloat(row.pending_amount) || 0,
-      completedAmount: parseFloat(row.completed_amount) || 0,
-      settledAmount: parseFloat(row.settled_amount) || 0
+      total,
+      pending,
+      completed,
+      settled,
+      pendingAmount,
+      completedAmount,
+      settledAmount
     };
     
-    // 设置正确的Content-Type头
-    const response = NextResponse.json(stats);
-    response.headers.set('Content-Type', 'application/json; charset=utf-8');
-    return response;
-  } catch (error) {
+    console.log('成功获取统计数据:', stats);
+    return NextResponse.json(stats);
+  } catch (error: any) {
     console.error('获取统计数据失败:', error);
-    // 在本地开发环境中，如果没有配置数据库连接，则返回默认统计数据
-    if (!process.env.VERCEL && !process.env.POSTGRES_URL) {
-      return NextResponse.json({
-        total: 0,
-        pending: 0,
-        completed: 0,
-        settled: 0,
-        pendingAmount: 0,
-        completedAmount: 0,
-        settledAmount: 0
-      });
-    }
-    return NextResponse.json({ error: '获取统计数据失败' }, { status: 500 });
+    return NextResponse.json({ error: '获取统计数据失败', details: error.message || '未知错误' }, { status: 500 });
   }
 }
