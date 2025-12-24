@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/auth-server';
 
 // GET /api/orders/[id] - 获取特定订单
 export async function GET(
@@ -9,15 +10,22 @@ export async function GET(
   try {
     console.log('GET /api/orders/[id] called');
     
+    // 获取当前登录用户
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: '未认证' }, { status: 401 });
+    }
+    
     // 在Next.js 14中，params是一个Promise，需要await来解包
     const { id } = await params;
     console.log('订单ID:', id);
     
-    // 从Supabase获取特定订单
+    // 从Supabase获取特定订单，确保属于当前用户
     const { data, error } = await supabase
       .from('orders')
       .select('*')
       .eq('id', id)
+      .eq('user_id', user.userId)  // 确保订单属于当前用户
       .single();
     
     if (error) {
@@ -44,6 +52,7 @@ export async function GET(
       orderNumber: data.order_number,
       status: data.status,
       amount: data.amount,
+      userId: data.user_id,  // 包含用户ID
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };
@@ -71,6 +80,12 @@ export async function PUT(
   try {
     console.log('PUT /api/orders/[id] called');
     
+    // 获取当前登录用户
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: '未认证' }, { status: 401 });
+    }
+    
     // 在Next.js 14中，params是一个Promise，需要await来解包
     const { id } = await params;
     console.log('订单ID:', id);
@@ -78,19 +93,41 @@ export async function PUT(
     const orderData = await request.json();
     console.log('更新数据:', orderData);
     
-    // 准备更新到Supabase的数据
-    const updatedOrder = {
-      content: orderData.content,
-      order_number: orderData.orderNumber,
-      status: orderData.status,
-      amount: orderData.amount || 0,
-      updated_at: new Date().toISOString()
-    };
+    // 从Supabase获取当前订单，确保属于当前用户
+    const { data: existingOrder, error: fetchError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('id', id)
+      .eq('user_id', user.userId)  // 确保订单属于当前用户
+      .single();
     
-    // 更新Supabase中的订单
+    if (fetchError) {
+      console.error('获取现有订单失败:', fetchError);
+      // 处理连接超时错误
+      if (fetchError.message.includes('fetch failed') || fetchError.message.includes('Connect Timeout Error')) {
+        return NextResponse.json({ 
+          error: '连接Supabase超时', 
+          details: '请检查网络连接或稍后重试'
+        }, { status: 500 });
+      }
+      return NextResponse.json({ error: '更新订单失败', details: fetchError.message }, { status: 500 });
+    }
+    
+    if (!existingOrder) {
+      console.log('订单未找到或不属于当前用户:', id);
+      return NextResponse.json({ error: '订单未找到' }, { status: 404 });
+    }
+    
+    // 更新订单
     const { data, error } = await supabase
       .from('orders')
-      .update(updatedOrder)
+      .update({
+        content: orderData.content,
+        order_number: orderData.orderNumber,
+        status: orderData.status,
+        amount: orderData.amount,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', id)
       .select()
       .single();
@@ -119,6 +156,7 @@ export async function PUT(
       orderNumber: data.order_number,
       status: data.status,
       amount: data.amount,
+      userId: data.user_id,  // 包含用户ID
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };
@@ -146,15 +184,22 @@ export async function DELETE(
   try {
     console.log('DELETE /api/orders/[id] called');
     
+    // 获取当前登录用户
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: '未认证' }, { status: 401 });
+    }
+    
     // 在Next.js 14中，params是一个Promise，需要await来解包
     const { id } = await params;
     console.log('订单ID:', id);
     
-    // 从Supabase删除订单
+    // 从Supabase删除订单，确保属于当前用户
     const { error } = await supabase
       .from('orders')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', user.userId);  // 确保订单属于当前用户
     
     if (error) {
       console.error('Supabase删除订单失败:', error);

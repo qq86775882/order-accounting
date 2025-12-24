@@ -1,23 +1,32 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/auth-server';
 
-// GET /api/orders/stats - 获取订单统计数据
+// GET /api/orders/stats - 获取当前用户的订单统计数据
 export async function GET() {
   try {
     console.log('GET /api/orders/stats called');
     
-    // 检查数据库连接
-    const { data: checkData, error: checkError } = await supabase
-      .from('orders')
-      .select('id')
-      .limit(1);
+    // 获取当前登录用户
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: '未认证' }, { status: 401 });
+    }
     
-    if (checkError) {
-      console.error('数据库连接检查失败:', checkError);
-      // 如果是表不存在的错误，返回默认统计数据而不是错误
-      if (checkError.message.includes('not found') || checkError.message.includes('Could not find the table')) {
-        console.log('表不存在，返回默认统计数据');
-        return NextResponse.json({
+    // 从Supabase获取当前用户的统计数据
+    const { data, error } = await supabase
+      .from('orders')
+      .select('status, amount')
+      .eq('user_id', user.userId);  // 只获取当前用户的数据
+    
+    if (error) {
+      console.error('Supabase获取统计数据失败:', error);
+      // 处理连接超时错误
+      if (error.message.includes('fetch failed') || error.message.includes('Connect Timeout Error')) {
+        return NextResponse.json({ 
+          error: '连接Supabase超时', 
+          details: '请检查网络连接或稍后重试',
+          // 返回默认统计数据
           total: 0,
           pending: 0,
           completed: 0,
@@ -27,16 +36,6 @@ export async function GET() {
           settledAmount: 0
         });
       }
-      return NextResponse.json({ error: '数据库连接失败', details: checkError.message }, { status: 500 });
-    }
-    
-    // 从Supabase获取统计数据
-    const { data, error } = await supabase
-      .from('orders')
-      .select('status, amount');
-    
-    if (error) {
-      console.error('Supabase获取统计数据失败:', error);
       return NextResponse.json({ error: '获取统计数据失败', details: error.message }, { status: 500 });
     }
     
@@ -72,6 +71,21 @@ export async function GET() {
     return NextResponse.json(stats);
   } catch (error: any) {
     console.error('获取统计数据失败:', error);
+    // 处理连接超时错误
+    if (error.message.includes('fetch failed') || error.message.includes('Connect Timeout Error')) {
+      return NextResponse.json({ 
+        error: '连接Supabase超时', 
+        details: '请检查网络连接或稍后重试',
+        // 返回默认统计数据
+        total: 0,
+        pending: 0,
+        completed: 0,
+        settled: 0,
+        pendingAmount: 0,
+        completedAmount: 0,
+        settledAmount: 0
+      });
+    }
     return NextResponse.json({ error: '获取统计数据失败', details: error.message || '未知错误' }, { status: 500 });
   }
 }

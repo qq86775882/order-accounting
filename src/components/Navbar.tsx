@@ -10,7 +10,6 @@ export default function Navbar() {
   
   const navItems = [
     { name: '首页', path: '/' },
-    { name: '订单管理', path: '/orders' },
   ];
 
   const toggleMenu = () => {

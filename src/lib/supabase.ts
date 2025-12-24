@@ -14,6 +14,7 @@ export interface Order {
   order_number: string
   status: '已下单' | '已完成' | '已结算'
   amount: number
+  user_id: string  // 新增：关联用户ID
   created_at: string
   updated_at: string
 }
