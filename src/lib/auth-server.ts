@@ -5,9 +5,15 @@ import { User } from './user';
 import { NextResponse } from 'next/server';
 
 // JWT密钥，实际应用中应从环境变量获取
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your_jwt_secret_key_here_must_be_at_least_32_chars_long'
-);
+const getJWTSecret = () => {
+  const secret = process.env.JWT_SECRET || 'your_jwt_secret_key_here_must_be_at_least_32_chars_long';
+  if (secret === 'your_jwt_secret_key_here_must_be_at_least_32_chars_long') {
+    console.warn('警告: 使用默认JWT密钥，生产环境中请设置JWT_SECRET环境变量');
+  }
+  return new TextEncoder().encode(secret);
+};
+
+const JWT_SECRET = getJWTSecret();
 
 // 密码加密
 export async function hashPassword(password: string): Promise<string> {
@@ -70,7 +76,7 @@ export function setAuthCookieForResponse(token: string): NextResponse {
   const response = NextResponse.json({ message: 'Success' });
   response.cookies.set('token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production' ? true : false,
     maxAge: 60 * 60 * 24 * 30, // 30天
     path: '/',
     sameSite: 'strict',
@@ -91,7 +97,7 @@ export async function setAuthCookieDirect(token: string) {
     const cookieStore = await cookies();
     cookieStore.set('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' ? true : false,
       maxAge: 60 * 60 * 24 * 30, // 30天
       path: '/',
       sameSite: 'strict',

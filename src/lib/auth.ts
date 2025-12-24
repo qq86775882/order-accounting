@@ -3,9 +3,15 @@ import { compare, hash } from 'bcryptjs';
 import { User } from './user';
 
 // JWT密钥，实际应用中应从环境变量获取
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your_jwt_secret_key_here_must_be_at_least_32_chars_long'
-);
+const getJWTSecret = () => {
+  const secret = process.env.JWT_SECRET || 'your_jwt_secret_key_here_must_be_at_least_32_chars_long';
+  if (secret === 'your_jwt_secret_key_here_must_be_at_least_32_chars_long') {
+    console.warn('警告: 使用默认JWT密钥，生产环境中请设置JWT_SECRET环境变量');
+  }
+  return new TextEncoder().encode(secret);
+};
+
+const JWT_SECRET = getJWTSecret();
 
 // 密码加密
 export async function hashPassword(password: string): Promise<string> {
