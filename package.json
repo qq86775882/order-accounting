@@ -10,9 +10,9 @@
     "migrate": "tsx scripts/create_admin_and_migrate.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.89.0",
     "bcryptjs": "^2.4.3",
     "jose": "^5.9.6",
+    "mysql2": "^3.12.0",
     "next": "16.1.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"

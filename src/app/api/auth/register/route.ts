@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+// import { supabase } from '@/lib/supabase';
 import { hashPassword, signToken } from '@/lib/auth';
+import { pool } from '@/lib/mysql';
+
+interface User {
+  id: string;
+  username: string;
+  password: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export async function POST(request: Request) {
   try {
@@ -22,69 +31,80 @@ export async function POST(request: Request) {
     }
 
     // 检查用户名是否已存在
-    const { data: existingUser, error: fetchError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('username', username)
-      .single();
-
-    if (existingUser) {
-      return NextResponse.json(
-        { error: '用户名已存在' },
-        { status: 409 }
+    const connection = await pool.getConnection();
+    try {
+      await connection.query('USE orders_all;');
+      
+      const result = await connection.query(
+        'SELECT id FROM users WHERE username = ?',
+        [username]
       );
-    }
+      const rows = result[0] as User[];
+      
+      if (rows.length > 0) {
+        return NextResponse.json(
+          { error: '用户名已存在' },
+          { status: 409 }
+        );
+      }
 
-    // 加密密码
-    const hashedPassword = await hashPassword(password);
+      // 加密密码
+      const hashedPassword = await hashPassword(password);
 
-    // 创建新用户
-    const { data: newUser, error: insertError } = await supabase
-      .from('users')
-      .insert([
-        {
-          username,
-          password: hashedPassword,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ])
-      .select()
-      .single();
+      // 生成用户ID
+      const userId = generateId();
 
-    if (insertError) {
-      console.error('创建用户失败:', insertError);
-      return NextResponse.json(
-        { error: '创建用户失败', details: insertError.message },
-        { status: 500 }
+      // 创建新用户
+      await connection.query(
+        'INSERT INTO users (id, username, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        [userId, username, hashedPassword, new Date().toISOString().slice(0, 19).replace('T', ' '), new Date().toISOString().slice(0, 19).replace('T', ' ')]
       );
+
+      // 获取新创建的用户
+      const newUserResult = await connection.query(
+        'SELECT id, username, created_at, updated_at FROM users WHERE id = ?',
+        [userId]
+      );
+      const newUserRows = newUserResult[0] as User[];
+      const newUser = newUserRows[0];
+
+      // 生成JWT token
+      const token = await signToken({
+        userId: newUser.id,
+        username: newUser.username,
+      });
+
+      // 设置认证cookie并返回响应
+      const response = NextResponse.json({
+        user: { id: newUser.id, username: newUser.username, created_at: newUser.created_at, updated_at: newUser.updated_at },
+        token,
+      });
+      response.cookies.set('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 24 * 30, // 30天
+        path: '/',
+        sameSite: 'strict',
+      });
+
+      return response;
+    } finally {
+      connection.release();
     }
-
-    // 生成JWT token
-    const token = await signToken({
-      userId: newUser.id,
-      username: newUser.username,
-    });
-
-    // 设置认证cookie并返回响应
-    const response = NextResponse.json({
-      user: { id: newUser.id, username: newUser.username, created_at: newUser.created_at, updated_at: newUser.updated_at },
-      token,
-    });
-    response.cookies.set('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 30, // 30天
-      path: '/',
-      sameSite: 'strict',
-    });
-
-    return response;
-  } catch (error: any) {
+  } catch (error) {
     console.error('注册失败:', error);
     return NextResponse.json(
-      { error: '注册失败', details: error.message },
+      { error: '注册失败', details: (error as Error).message },
       { status: 500 }
     );
   }
+}
+
+// 生成UUID辅助函数
+function generateId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }

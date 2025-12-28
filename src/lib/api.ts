@@ -23,7 +23,9 @@ export async function getAllOrders(): Promise<Order[]> {
       }
       throw new Error(`获取订单列表失败: ${response.status} ${response.statusText}`);
     }
-    return await response.json();
+    const result = await response.json();
+    // API返回格式为 { data: orders }，需要提取data字段
+    return result.data || [];
   } catch (error) {
     console.error('获取订单列表时出错:', error);
     return [];
@@ -45,7 +47,9 @@ export async function getOrderById(id: string): Promise<Order | null> {
       }
       throw new Error(`获取订单失败: ${response.status} ${response.statusText}`);
     }
-    return await response.json();
+    const result = await response.json();
+    // API返回格式为 { data: order }，需要提取data字段
+    return result.data || null;
   } catch (error) {
     console.error('根据ID获取订单时出错:', error);
     return null;
@@ -72,7 +76,9 @@ export async function createOrder(orderData: Omit<Order, 'id' | 'createdAt' | 'u
       throw new Error(`创建订单失败: ${response.status} ${response.statusText}`);
     }
     
-    return await response.json();
+    const result = await response.json();
+    // API返回格式为 { data: order }，需要提取data字段
+    return result.data;
   } catch (error) {
     console.error('创建订单时出错:', error);
     throw error;
@@ -102,7 +108,9 @@ export async function updateOrder(id: string, orderData: Partial<Omit<Order, 'id
       throw new Error(`更新订单失败: ${response.status} ${response.statusText}`);
     }
     
-    return await response.json();
+    const result = await response.json();
+    // API返回格式为 { data: order }，需要提取data字段
+    return result.data || null;
   } catch (error) {
     console.error('更新订单时出错:', error);
     throw error;
@@ -186,7 +194,7 @@ export async function registerUser(username: string, password: string) {
       throw new Error(errorData.error || '注册失败');
     }
     
-    return await response.json();
+    return await response.json(); // 注册API返回格式为 { user, token }
   } catch (error) {
     console.error('注册失败:', error);
     throw error;
@@ -206,10 +214,11 @@ export async function loginUser(username: string, password: string) {
     
     if (!response.ok) {
       const errorData = await response.json();
+      // 提示登录失败
       throw new Error(errorData.error || '登录失败');
     }
     
-    return await response.json();
+    return await response.json(); // 登录API返回格式为 { user, token }
   } catch (error) {
     console.error('登录失败:', error);
     throw error;
@@ -247,7 +256,9 @@ export async function getCurrentUser() {
       }
       throw new Error(`获取用户信息失败: ${response.status} ${response.statusText}`);
     }
-    return await response.json();
+    const result = await response.json();
+    // API返回格式为 { data: user }，需要提取data字段
+    return result.data || null;
   } catch (error) {
     console.error('获取用户信息时出错:', error);
     return null;

@@ -26,12 +26,12 @@ export default function LoginPage() {
     try {
       await loginUser(username, password);
       // 登录成功后跳转到仪表盘页面
-      router.push('/');
+      router.push('/dashboard');
       router.refresh();
       setNotification({ message: '登录成功！', type: 'success' });
-    } catch (err: any) {
+    } catch (err) {
       console.error('登录失败:', err);
-      const errorMessage = err.message || '登录失败，请重试';
+      const errorMessage = (err as Error).message || '登录失败，请重试';
       setError(errorMessage);
       setNotification({ message: errorMessage, type: 'error' });
     } finally {

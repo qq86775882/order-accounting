@@ -17,13 +17,16 @@ export default function Sidebar() {
 
   // 在移动端关闭菜单（路由变化时）
   useEffect(() => {
-    setIsMobileMenuOpen(false);
+    const timer = setTimeout(() => {
+      setIsMobileMenuOpen(false);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [pathname]);
 
   const navItems = [
-    { name: '仪表盘', path: '/' },
-    { name: '订单管理', path: '/orders' },
-    { name: '修改密码', path: '/change-password' }, // 新增修改密码选项
+    { name: '仪表盘', path: '/dashboard' },
+    { name: '订单管理', path: '/dashboard/orders' },
+    { name: '修改密码', path: '/dashboard/change-password' }, // 新增修改密码选项
   ];
 
   const handleLogout = async () => {

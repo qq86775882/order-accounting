@@ -1,32 +1,44 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { getCurrentUser } from '@/lib/auth-server';
+import { verifyToken } from '@/lib/auth-server';
+// import { supabase } from '@/lib/supabase';
+import { pool } from '@/lib/mysql';
 
 export async function GET() {
   try {
-    // 获取当前登录用户
-    const user = await getCurrentUser();
+    // 验证JWT令牌
+    const user = await verifyToken();
     if (!user) {
       return NextResponse.json({ error: '未认证' }, { status: 401 });
     }
 
-    // 从Supabase获取用户详细信息（不包含密码）
-    const { data: userData, error } = await supabase
-      .from('users')
-      .select('id, username, created_at, updated_at')
-      .eq('id', user.userId)
-      .single();
-
-    if (error || !userData) {
-      return NextResponse.json({ error: '获取用户信息失败' }, { status: 500 });
+    // 从MySQL获取用户信息（不包含密码）
+    const connection = await pool.getConnection();
+    try {
+      await connection.query('USE orders_all;');
+      
+      const [rows]: any = await connection.query(
+        'SELECT id, username, created_at, updated_at FROM users WHERE id = ?',
+        [user.userId]
+      );
+      
+      if (rows.length === 0) {
+        return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+      }
+      
+      const userData = rows[0];
+      const userInfo = {
+        id: userData.id,
+        username: userData.username,
+        createdAt: userData.created_at,
+        updatedAt: userData.updated_at
+      };
+      
+      return NextResponse.json({ data: userInfo });
+    } finally {
+      connection.release();
     }
-
-    return NextResponse.json(userData);
-  } catch (error: any) {
+  } catch (error) {
     console.error('获取用户信息失败:', error);
-    return NextResponse.json(
-      { error: '获取用户信息失败', details: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '获取用户信息失败' }, { status: 500 });
   }
 }
